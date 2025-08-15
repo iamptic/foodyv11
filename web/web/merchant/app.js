@@ -151,7 +151,7 @@ const payload = { city: city,  city: city,
             try { if (city) { try { localStorage.setItem('foody_city', (fd.get('city')||'').toString().trim()); } catch(_) {}
       await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({ restaurant_id: state.rid, address: (address || city), city: city }) }); } } catch(e) { console.warn('city save failed', e); }
       showToast('Ресторан создан ✅');
-      gate();
+      gate(); activateTab('profile');
     } catch (err) { console.error(err); showToast('Ошибка регистрации: ' + err.message); }
   });
 
