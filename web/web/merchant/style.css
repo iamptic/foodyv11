@@ -238,17 +238,3 @@ input:focus, textarea:focus { border-color: var(--brand-2); box-shadow: 0 0 0 2p
 #mode-register:checked ~ .track .thumb{ transform: translateX(100%); }
 .auth-forms { display: grid; gap: 16px; }
 .auth-forms form{ display: grid; gap: 10px; }
-
-
-/* Inline form error box */
-.form-error {
-  display: block;
-  background: rgba(255, 94, 94, .12);
-  border: 1px solid rgba(255, 94, 94, .35);
-  color: #ff9c9c;
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 14px;
-  margin-top: 6px;
-}
-.form-error.hidden { display: none; }
