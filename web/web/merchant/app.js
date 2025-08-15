@@ -2,52 +2,6 @@
   const $ = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
   const on = (sel, evt, fn) => { const el = $(sel); if (el) el.addEventListener(evt, fn, { passive: false }); };
-  // ===== Validation helpers =====
-  function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v||'').trim()); }
-  function normalizePhoneDigits(v){ return String(v||'').replace(/\D+/g,''); }
-  function isDigits(v){ return /^\d+$/.test(String(v||'')); }
-  function isTimeHHMM(v){ return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(v||'')); }
-
-  function clearFormErrors(formSel, errorSel){
-    try{
-      const form = document.querySelector(formSel);
-      if (form){
-        form.querySelectorAll('input,select,textarea').forEach(el => { 
-          el.classList.remove('input-error'); 
-          el.style.borderColor=''; 
-          el.style.boxShadow=''; 
-        });
-      }
-      const box = document.querySelector(errorSel);
-      if (box){ box.classList.add('hidden'); box.textContent=''; }
-    }catch(e){}
-  }
-  function markInvalid(el, message, errorSel){
-    if (el){ 
-      el.classList.add('input-error'); 
-      el.style.borderColor='rgba(255,94,94,.65)'; 
-      el.style.boxShadow='0 0 0 2px rgba(255,94,94,.15)'; 
-      try { el.focus({preventScroll:true}); } catch(_) {}
-    }
-    const box = document.querySelector(errorSel);
-    if (box){ box.textContent = message; box.classList.remove('hidden'); }
-    else { showToast(message); }
-  }
-  function bindFormClear(formSel, errorSel){
-    const form = document.querySelector(formSel);
-    if (!form) return;
-    form.addEventListener('input', (e)=>{
-      const t = e.target;
-      if (t && t.style){ 
-        t.classList.remove('input-error'); 
-        t.style.borderColor=''; 
-        t.style.boxShadow=''; 
-      }
-      const box = document.querySelector(errorSel);
-      if (box){ box.classList.add('hidden'); }
-    }, {passive:true});
-  }
-
 
   function moneyToCents(v){ try { return Math.round(parseFloat(v||'0')*100) } catch(e){ return 0 } }
   function dtLocalToIso(v){
@@ -85,11 +39,6 @@ const state = {
   };
 
   const toastBox = $('#toast');
-  function toggleLogout(visible){
-    const btn = $('#logoutBtn'); if (!btn) return;
-    btn.style.display = visible ? '' : 'none';
-  }
-
   const showToast = (msg) => {
     const el = document.createElement('div');
     el.className = 'toast'; el.textContent = msg;
@@ -123,7 +72,6 @@ const state = {
       activateTab('auth');
       const tabs = $('#tabs'); if (tabs) tabs.style.display = 'none';
       const bn = $('.bottom-nav'); if (bn) bn.style.display = 'none';
-      toggleLogout(false);
       return false;
     }
     const tabs = $('#tabs'); if (tabs) tabs.style.display = '';
@@ -180,29 +128,6 @@ const state = {
   on('#registerForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    clearFormErrors('#registerForm','#registerError');
-    const nameEl  = document.querySelector('#registerForm input[name="name"]');
-    const loginEl = document.querySelector('#registerForm input[name="login"]');
-    const passEl  = document.querySelector('#registerForm input[name="password"]');
-    const citySel = document.getElementById('citySelect');
-    const cityInp = document.getElementById('cityCustom');
-    const addrEl  = document.querySelector('#registerForm input[name="address"]');
-    let nameVal = (fd.get('name')||'').toString().trim();
-    let loginVal = (fd.get('login')||'').toString().trim();
-    let passVal  = (fd.get('password')||'').toString().trim();
-    let address  = (fd.get('address')||'').toString().trim();
-    let city = '';
-    if (citySel){ city = citySel.value === 'other' ? (cityInp ? (cityInp.value||'').trim() : '') : (citySel.value||''); }
-    let ok = true;
-    if (!nameVal || nameVal.length < 2){ markInvalid(nameEl,'Введите название ресторана (мин. 2 символа)','#registerError'); ok = false; }
-    if (!loginVal){ markInvalid(loginEl,'Введите телефон или email','#registerError'); ok = false; }
-    else if (loginVal.includes('@')){ if (!isEmail(loginVal)){ markInvalid(loginEl,'Некорректный email','#registerError'); ok = false; } }
-    else { const digits = normalizePhoneDigits(loginVal); if (digits !== loginVal || !isDigits(digits) || digits.length < 6){ markInvalid(loginEl,'Телефон — только цифры (мин. 6)','#registerError'); ok = false; } else { loginVal = digits; } }
-    if (!passVal || passVal.length < 6){ markInvalid(passEl,'Минимальная длина пароля — 6 символов','#registerError'); ok = false; }
-    if (citySel){ if (!city){ markInvalid(citySel,'Выберите город','#registerError'); ok = false; } }
-    if (citySel && citySel.value==='other' && cityInp && !cityInp.value.trim()){ markInvalid(cityInp,'Укажите ваш город','#registerError'); ok = false; }
-    if (!ok) return;
-
         const citySel = document.getElementById('citySelect');
   const cityInp = document.getElementById('cityCustom');
   let city = '';
@@ -220,33 +145,14 @@ const payload = { city: city,  city: city,
             try { if (city) { try { localStorage.setItem('foody_city', (fd.get('city')||'').toString().trim()); } catch(_) {}
       await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({ restaurant_id: state.rid, address: (address || city), city: city }) }); } } catch(e) { console.warn('city save failed', e); }
       showToast('Ресторан создан ✅');
-      gate(); activateTab('profile');
+      gate();
     } catch (err) { console.error(err); showToast('Ошибка регистрации: ' + err.message); }
   });
 
   on('#loginForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    clearFormErrors('#loginForm','#loginError');
-    const loginEl = document.querySelector('#loginForm input[name="login"]');
-    const passEl  = document.querySelector('#loginForm input[name="password"]');
-    let loginVal = (fd.get('login')||'').toString().trim();
-    let passVal  = (fd.get('password')||'').toString().trim();
-    let ok = true;
-    if (!loginVal){
-      markInvalid(loginEl,'Введите телефон или email','#loginError'); ok = false;
-    } else if (loginVal.includes('@')){
-      if (!isEmail(loginVal)){ markInvalid(loginEl,'Некорректный email','#loginError'); ok = false; }
-    } else {
-      const digits = normalizePhoneDigits(loginVal);
-      if (digits !== loginVal || !isDigits(digits) || digits.length < 6){
-        markInvalid(loginEl,'Телефон — только цифры (мин. 6)','#loginError'); ok = false;
-      } else { loginVal = digits; }
-    }
-    if (!passVal){ markInvalid(passEl,'Введите пароль','#loginError'); ok = false; }
-    if (!ok) return;
-
-    const payload = { login: loginVal, password: passVal };
+    const payload = { login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
     try {
       const r = await api('/api/v1/merchant/login', { method: 'POST', body: JSON.stringify(payload) });
       state.rid = r.restaurant_id; state.key = r.api_key;
@@ -277,17 +183,6 @@ const payload = { city: city,  city: city,
   }
   on('#profileForm','submit', async (e) => {
     e.preventDefault();
-    clearFormErrors('#profileForm','#profileError');
-    const form = document.getElementById('profileForm');
-    const phoneEl = form ? form.querySelector('input[name="phone"]') : null;
-    const timeEl = form ? form.querySelector('input[name="close_time"]') : null;
-    if (phoneEl && phoneEl.value){ 
-      const digits = normalizePhoneDigits(phoneEl.value); 
-      if (digits !== phoneEl.value || !isDigits(digits)){ markInvalid(phoneEl,'Телефон — только цифры','#profileError'); return; } 
-      else { phoneEl.value = digits; } 
-    }
-    if (timeEl && timeEl.value && !isTimeHHMM(timeEl.value)){ markInvalid(timeEl,'Время в формате ЧЧ:ММ (00–23:59)','#profileError'); return; }
-
     if (!state.rid || !state.key) return showToast('Сначала войдите');
     const fd = new FormData(e.currentTarget);
     const payload = {
@@ -339,7 +234,6 @@ const payload = { city: city,  city: city,
       e.currentTarget.reset();
       loadOffers();
       activateTab('offers');
-    toggleLogout(true);
     } catch (err) { console.error(err); showToast('Ошибка создания: ' + err.message); }
   });
 
@@ -454,7 +348,7 @@ const payload = { city: city,  city: city,
     try { document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', initCityUI) : initCityUI(); } catch(e) {}
 
 document.addEventListener('DOMContentLoaded', () => {
-    bindFormClear('#loginForm','#loginError'); bindFormClear('#registerForm','#registerError'); bindFormClear('#profileForm','#profileError'); gate(); gate();
+    gate();
   });
 
 })();
