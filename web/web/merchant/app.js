@@ -18,7 +18,7 @@
 
   
   // City UI: toggle 'Другой' custom input and remember selection
-  function initCityUI(){}
+  function initCityUI(){ /* no-op: city is plain text now */ }
     };
     sel.addEventListener('change', apply);
     apply();
@@ -119,10 +119,10 @@ const state = {
   on('#registerForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-        let city = (fd.get('city') || '').toString().trim();
-try { if (city) { localStorage.setItem('foody_reg_city', city); localStorage.setItem('foody_city', city); } } catch(_) {}
-const address = (fd.get('address') || '').toString().trim();
-const payload = { city: city,  city: city,
+          const city = (fd.get('city')||'').toString().trim();
+  const address = (fd.get('address')||'').toString().trim();
+  try { if (city) localStorage.setItem('foody_reg_city', city); localStorage.setItem('foody_city', city); } catch(_) {}
+const payload = { city: (typeof city!=='undefined'? city : (fd.get('city')||'').toString().trim()), city: city,  city: city,
        name: fd.get('name')?.trim(), login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
     try {
       const r = await api('/api/v1/merchant/register_public', { method: 'POST', body: JSON.stringify(payload) });
