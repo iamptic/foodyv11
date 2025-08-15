@@ -39,6 +39,46 @@ const state = {
   };
 
   const toastBox = $('#toast');
+  // ---- Validation helpers (non-breaking) ----
+  (function injectErrorStyles(){
+    if (document.getElementById('foody-error-style')) return;
+    const s = document.createElement('style');
+    s.id = 'foody-error-style';
+    s.textContent = `.input-error{border-color: rgba(255,94,94,.85)!important; box-shadow: 0 0 0 2px rgba(255,94,94,.15) inset}`;
+    document.head.appendChild(s);
+  })();
+
+  function ensureErrorBox(id, formSel){
+    let box = document.querySelector(id);
+    if (!box) {
+      const form = typeof formSel==='string' ? document.querySelector(formSel) : formSel;
+      if (form) {
+        box = document.createElement('div');
+        box.id = id.replace(/^#/, '');
+        box.className = 'form-error';
+        box.classList.add('hidden');
+        form.prepend(box);
+      }
+    }
+    return box;
+  }
+
+  function showInline(id, text){
+    const el = document.querySelector(id) || ensureErrorBox(id, null);
+    if (!el) { showToast(text); return; }
+    el.textContent = text;
+    el.classList.remove('hidden');
+    setTimeout(()=> el.classList.add('hidden'), 6000);
+  }
+
+  function clearInvalid(form){
+    (form && form.querySelectorAll('.input-error')).forEach(el => el.classList.remove('input-error'));
+  }
+  function markInvalid(el){ if (el) el.classList.add('input-error'); }
+
+  function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v||'').trim()); }
+  function isPhoneDigits(v){ return /^\d+$/.test(String(v||'').trim()); }
+
   function toggleLogout(visible){
     const btn = $('#logoutBtn'); if (!btn) return;
     btn.style.display = visible ? '' : 'none';
@@ -134,7 +174,42 @@ const state = {
   on('#registerForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-        const citySel = document.getElementById('citySelect');
+        
+    clearInvalid(e.currentTarget);
+    const nameInput  = document.querySelector('#registerForm input[name="name"]');
+    const loginInput = document.querySelector('#registerForm input[name="login"]');
+    const passInput  = document.querySelector('#registerForm input[name="password"]');
+    const selCity    = document.getElementById('citySelect');
+    const inpOther   = document.getElementById('cityCustom');
+    const addrInput  = document.querySelector('#registerForm input[name="address"]');
+    let regErrors = [];
+
+    // Extract city chosen/other (recompute to validate)
+    let regCity = '';
+    if (selCity) regCity = selCity.value === 'other' ? (inpOther ? (inpOther.value||'').trim() : '') : (selCity.value||'');
+
+    // Basic checks
+    const nameVal = (nameInput?.value||'').trim();
+    if (!nameVal) { regErrors.push('Название ресторана обязательно.'); markInvalid(nameInput); }
+
+    const loginVal = (loginInput?.value||'').trim();
+    if (!loginVal) { regErrors.push('Укажите телефон или email.'); markInvalid(loginInput); }
+    else {
+      if (loginVal.includes('@')) {
+        if (!isEmail(loginVal)) { regErrors.push('Некорректный email.'); markInvalid(loginInput); }
+      } else {
+        if (!isPhoneDigits(loginVal)) { regErrors.push('Телефон только из цифр.'); markInvalid(loginInput); }
+        else if (loginVal.length < 10) { regErrors.push('Телефон слишком короткий (мин. 10 цифр).'); markInvalid(loginInput); }
+      }
+    }
+
+    const passVal = (passInput?.value||'').trim();
+    if (passVal.length < 6) { regErrors.push('Пароль минимум 6 символов.'); markInvalid(passInput); }
+
+    if (!regCity) { regErrors.push('Выберите город.'); markInvalid(selCity); if (selCity?.value==='other') markInvalid(inpOther); }
+
+    if (regErrors.length) { showInline('#registerError', regErrors.join(' ')); return; }
+const citySel = document.getElementById('citySelect');
   const cityInp = document.getElementById('cityCustom');
   let city = '';
   if (citySel) { city = citySel.value === 'other' ? (cityInp ? (cityInp.value||'').trim() : '') : (citySel.value||''); }
@@ -159,7 +234,25 @@ const payload = { city: city,  city: city,
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const payload = { login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
-    try {
+    
+      // Client-side validation
+      const loginInput = document.querySelector('#loginForm input[name="login"]');
+      const passInput  = document.querySelector('#loginForm input[name="password"]');
+      const loginVal = (payload.login||'').trim();
+      const pwdVal = (payload.password||'').trim();
+      let errors = [];
+      if (!loginVal) { errors.push('Укажите телефон или email.'); markInvalid(loginInput); }
+      else {
+        if (loginVal.includes('@')) {
+          if (!isEmail(loginVal)) { errors.push('Некорректный email.'); markInvalid(loginInput); }
+        } else {
+          if (!isPhoneDigits(loginVal)) { errors.push('Телефон только из цифр.'); markInvalid(loginInput); }
+          else if (loginVal.length < 10) { errors.push('Телефон слишком короткий (мин. 10 цифр).'); markInvalid(loginInput); }
+        }
+      }
+      if (!pwdVal) { errors.push('Введите пароль.'); markInvalid(passInput); }
+      if (errors.length) { showInline('#loginError', errors.join(' ')); return; }
+try {
       const r = await api('/api/v1/merchant/login', { method: 'POST', body: JSON.stringify(payload) });
       state.rid = r.restaurant_id; state.key = r.api_key;
       localStorage.setItem('foody_restaurant_id', state.rid);
@@ -189,7 +282,20 @@ const payload = { city: city,  city: city,
   }
   on('#profileForm','submit', async (e) => {
     e.preventDefault();
-    if (!state.rid || !state.key) return showToast('Сначала войдите');
+    
+    const form = e.currentTarget;
+    clearInvalid(form);
+    ensureErrorBox('#profileError', form);
+    const phoneInput = form.querySelector('input[name="phone"]');
+    const addrInput  = form.querySelector('input[name="address"]');
+    const cityInput  = form.querySelector('input[name="city"]') || document.getElementById('profileCity');
+    let pErrors = [];
+    const phoneVal = (phoneInput?.value||'').trim();
+    if (phoneVal && !isPhoneDigits(phoneVal)) { pErrors.push('Телефон в профиле должен содержать только цифры.'); markInvalid(phoneInput); }
+    // Address optional; City optional but prefilled elsewhere.
+
+    if (pErrors.length) { showInline('#profileError', pErrors.join(' ')); return; }
+if (!state.rid || !state.key) return showToast('Сначала войдите');
     const fd = new FormData(e.currentTarget);
     const payload = {
       restaurant_id: state.rid,
