@@ -1,0 +1,1 @@
+Папка merchant: index.html, app.js, style.css, create.enhance.js. Кладите в web/web/merchant/
