@@ -25,6 +25,18 @@
   const toastBox = $('#toast');
   const showToast = (msg) => {
     const el = document.createElement('div');
+  function toggleLogout(visible){
+    const btn = $('#logoutBtn'); if (!btn) return;
+    btn.style.display = visible ? '' : 'none';
+  }
+
+  function showInlineError(sel, text){
+    const el = typeof sel==='string' ? $(sel) : sel;
+    if (!el) { showToast(text); return; }
+    el.textContent = text; el.classList.remove('hidden');
+    setTimeout(()=> el.classList.add('hidden'), 5000);
+  }
+
     el.className = 'toast'; el.textContent = msg;
     toastBox.appendChild(el);
     setTimeout(() => el.remove(), 4200);
@@ -51,18 +63,27 @@
   });
 
   // Auth gating
-  function gate() {
+  function gate(){
     if (!state.rid || !state.key) {
       activateTab('auth');
       const tabs = $('#tabs'); if (tabs) tabs.style.display = 'none';
       const bn = $('.bottom-nav'); if (bn) bn.style.display = 'none';
+      toggleLogout(false);
+      // hide "Ближайшие офферы" карточку внутри авторизации
+      const near = document.getElementById('dashboardOffers');
+      if (near && near.closest('.card')) near.closest('.card').style.display = 'none';
       return false;
     }
     const tabs = $('#tabs'); if (tabs) tabs.style.display = '';
     const bn = $('.bottom-nav'); if (bn) bn.style.display = '';
+    toggleLogout(true);
+    // show back "Ближайшие офферы" if needed
+    const near = document.getElementById('dashboardOffers');
+    if (near && near.closest('.card')) near.closest('.card').style.display = '';
     activateTab('dashboard');
     return true;
   }
+
   $('#logoutBtn').addEventListener('click', () => {
     localStorage.removeItem('foody_restaurant_id');
     localStorage.removeItem('foody_key');
@@ -124,7 +145,8 @@
     } catch (err) { console.error(err); showToast('Ошибка регистрации: ' + err.message); }
   });
 
-  on('#loginForm','submit', async (e) => {
+  
+on('#loginForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const payload = { login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
@@ -135,8 +157,20 @@
       localStorage.setItem('foody_key', state.key);
       showToast('Вход выполнен ✅');
       gate();
-    } catch (err) { console.error(err); showToast('Ошибка входа: ' + err.message); }
+    } catch (err) {
+      console.error(err);
+      const msg = String(err.message||'');
+      if (msg.includes('401') || /invalid login or password/i.test(msg)) {
+        showInlineError('#loginError','Неверный логин или пароль.');
+      } else if (msg.includes('400') && /login and password are required/i.test(msg)) {
+        showInlineError('#loginError','Введите логин и пароль.');
+      } else {
+        showInlineError('#loginError', msg || 'Ошибка входа');
+      }
+    }
   });
+
+  // ===== PROFILE =====
 
   // ===== PROFILE =====
   async function loadProfile() {

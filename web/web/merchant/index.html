@@ -32,7 +32,7 @@
         </div>
       </div>
       <div class="tg-header__right">
-        <button id="logoutBtn" class="btn btn-ghost">Выйти</button>
+        <button id="logoutBtn" class="btn btn-ghost" style="display:none">Выйти</button>
       </div>
     </header>
 
@@ -68,6 +68,7 @@
               <label>Пароль
                 <input name="password" type="password" placeholder="••••••••" required>
               </label>
+              <div id="loginError" class="form-error hidden"></div>
               <button class="btn btn-primary" type="submit">Войти</button>
             </form>
 
@@ -86,7 +87,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card" id="auth-nearby">
           <div class="card-title">Ближайшие офферы</div>
           <div id="dashboardOffers" class="list list-cards">
             <div class="skeleton"></div>
