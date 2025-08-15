@@ -18,7 +18,16 @@
 
   
   // City UI: toggle 'Другой' custom input and remember selection
-  function initCityUI(){ /* no-op: city is plain text now */ }
+  function initCityUI(){
+    const sel = document.getElementById('citySelect');
+    const wrap = document.getElementById('cityCustomWrap');
+    const inp = document.getElementById('cityCustom');
+    if (!sel) return;
+    const apply = () => {
+      const isOther = sel.value === 'other';
+      if (wrap) wrap.style.display = isOther ? '' : 'none';
+      if (inp) inp.required = isOther;
+      if (!isOther && inp) { inp.value = ''; inp.required = false; }
     };
     sel.addEventListener('change', apply);
     apply();
@@ -119,10 +128,13 @@ const state = {
   on('#registerForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-          const city = (fd.get('city')||'').toString().trim();
-  const address = (fd.get('address')||'').toString().trim();
-  try { if (city) localStorage.setItem('foody_reg_city', city); localStorage.setItem('foody_city', city); } catch(_) {}
-const payload = { city: (typeof city!=='undefined'? city : (fd.get('city')||'').toString().trim()), city: city,  city: city,
+        const citySel = document.getElementById('citySelect');
+  const cityInp = document.getElementById('cityCustom');
+  let city = '';
+  if (citySel) { city = citySel.value === 'other' ? (cityInp ? (cityInp.value||'').trim() : '') : (citySel.value||''); }
+  if (city) try { localStorage.setItem('foody_reg_city', city); } catch(_) {}
+  const address = (fd.get('address') || '').toString().trim();
+const payload = { city: city,  city: city,
        name: fd.get('name')?.trim(), login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
     try {
       const r = await api('/api/v1/merchant/register_public', { method: 'POST', body: JSON.stringify(payload) });
