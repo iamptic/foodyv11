@@ -133,6 +133,7 @@ const state = {
   let city = '';
   if (citySel) { city = citySel.value === 'other' ? (cityInp ? (cityInp.value||'').trim() : '') : (citySel.value||''); }
   if (city) try { localStorage.setItem('foody_reg_city', city); } catch(_) {}
+  const address = (fd.get('address') || '').toString().trim();
 const payload = { city: city,  city: city,
        name: fd.get('name')?.trim(), login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
     try {
@@ -141,7 +142,8 @@ const payload = { city: city,  city: city,
       state.rid = r.restaurant_id; state.key = r.api_key;
       localStorage.setItem('foody_restaurant_id', state.rid);
       localStorage.setItem('foody_key', state.key);
-            try { if (city) { await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({ restaurant_id: state.rid, address: city }) }); } } catch(e) { console.warn('city save failed', e); }
+            try { if (city) { try { localStorage.setItem('foody_city', (fd.get('city')||'').toString().trim()); } catch(_) {}
+      await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({ restaurant_id: state.rid, address: (address || city), city: city }) }); } } catch(e) { console.warn('city save failed', e); }
       showToast('Ресторан создан ✅');
       gate();
     } catch (err) { console.error(err); showToast('Ошибка регистрации: ' + err.message); }
@@ -188,8 +190,6 @@ const payload = { city: city,  city: city,
       name: fd.get('name')?.trim(),
       phone: fd.get('phone')?.trim(),
       address: fd.get('address')?.trim(),
-      lat: parseFloat(fd.get('lat')) || null,
-      lng: parseFloat(fd.get('lng')) || null,
       close_time: fd.get('close_time') || null,
     };
     try {

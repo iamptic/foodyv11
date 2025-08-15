@@ -1,9 +1,10 @@
-# Foody backend (FastAPI) — v10 auth/merchant + sequence hotfix
+
+# Foody backend (FastAPI) — API v1 with City support (safe migration)
 import os
 import re
 import mimetypes
 from uuid import uuid4
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 
 import asyncpg
@@ -37,19 +38,13 @@ try:
             return False
     HASHER = "bcrypt"
 except Exception:
-    import hashlib, hmac
+    import hashlib
     _SALT = os.environ.get("PW_SALT", "foody_dev_salt")
     def hash_password(p: str) -> str:
         return hashlib.sha256((_SALT + p).encode("utf-8")).hexdigest()
     def verify_password(p: str, h: str) -> bool:
         return h == hash_password(p)
     HASHER = "sha256"
-
-def normalize_login(s: str) -> str:
-    s = (s or "").strip()
-    if "@" in s:
-        return s.lower()
-    return re.sub(r"\D+", "", s)  # digits only for phone
 
 def gen_api_key() -> str:
     return uuid4().hex + uuid4().hex  # 64 hex chars
@@ -73,6 +68,7 @@ async def _initialize(conn: asyncpg.Connection):
           id SERIAL PRIMARY KEY,
           name TEXT NOT NULL,
           address TEXT,
+          city TEXT,
           phone TEXT,
           email TEXT,
           password_hash TEXT,
@@ -115,6 +111,7 @@ async def _migrate_auth(conn: asyncpg.Connection):
         "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION",
         "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION",
         "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS close_time TIME",
+        "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS city TEXT",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_merchants_api_key ON merchants(api_key)",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_merchants_auth_login ON merchants(auth_login)",
         # offers compatibility
@@ -130,7 +127,6 @@ async def _migrate_auth(conn: asyncpg.Connection):
             pass
 
 async def _fix_sequences(conn: asyncpg.Connection):
-    # Align sequences with current max(id) to prevent duplicate key on id=1
     try:
         await conn.execute(
             "SELECT setval(pg_get_serial_sequence('merchants','id'), COALESCE((SELECT MAX(id) FROM merchants), 0))"
@@ -239,7 +235,6 @@ async def legacy_create_offer(payload: Dict[str, Any] = Body(...)):
         expires_at_dt = _parse_expires_at(payload.get("expires_at"))
 
         async with _pool.acquire() as conn:
-            # detect columns for compatibility
             cols = await conn.fetch("SELECT column_name FROM information_schema.columns WHERE table_name='offers'")
             colset = {c["column_name"] for c in cols}
             has_stock = "stock" in colset
@@ -297,7 +292,7 @@ async def public_offers():
                    COALESCE(o.qty_left, o.stock) AS qty_left,
                    COALESCE(o.qty_total, o.stock) AS qty_total,
                    o.image_url, o.expires_at, o.status,
-                   m.id AS merchant_id, m.name AS merchant_name, m.address
+                   m.id AS merchant_id, m.name AS merchant_name, m.address, m.city
             FROM offers o
             JOIN merchants m ON m.id = o.merchant_id
             WHERE o.status = 'active'
@@ -309,10 +304,7 @@ async def public_offers():
         )
         return [dict(r) for r in rows]
 
-# =====================================================
-# New: API v1 with proper registration & login
-# =====================================================
-
+# ====== API v1 ======
 async def _require_auth(conn: asyncpg.Connection, restaurant_id: int, api_key: str):
     row = await conn.fetchrow(
         "SELECT id FROM merchants WHERE id=$1 AND api_key=$2",
@@ -324,11 +316,14 @@ async def _require_auth(conn: asyncpg.Connection, restaurant_id: int, api_key: s
 @app.post("/api/v1/merchant/register_public")
 async def register_public(payload: Dict[str, Any] = Body(...)):
     name = (payload.get("name") or "").strip()
-    login = normalize_login((payload.get("login") or payload.get("phone") or payload.get("email") or "").strip())
+    login = (payload.get("login") or payload.get("phone") or payload.get("email") or "").strip()
+    login = re.sub(r"\s+", "", login)
+    login_norm = login.lower() if "@" in login else re.sub(r"\D+", "", login)
     password = (payload.get("password") or "").strip()
+    city = (payload.get("city") or "").strip() or None
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
-    if not login:
+    if not login_norm:
         raise HTTPException(status_code=400, detail="phone or email is required")
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="password must be at least 6 chars")
@@ -337,37 +332,38 @@ async def register_public(payload: Dict[str, Any] = Body(...)):
     pwd_hash = hash_password(password)
 
     async with _pool.acquire() as conn:
-        exists = await conn.fetchval("SELECT 1 FROM merchants WHERE auth_login=$1", login)
+        exists = await conn.fetchval("SELECT 1 FROM merchants WHERE auth_login=$1", login_norm)
         if exists:
             raise HTTPException(status_code=409, detail="merchant already exists")
 
         phone, email = (None, None)
-        if "@" in login:
-            email = login
+        if "@" in login_norm:
+            email = login_norm
         else:
-            phone = login
+            phone = login_norm
 
         row = await conn.fetchrow(
             """
-            INSERT INTO merchants (name, phone, email, password_hash, api_key, auth_login, created_at)
-            VALUES ($1,$2,$3,$4,$5,$6, NOW())
+            INSERT INTO merchants (name, phone, email, password_hash, api_key, auth_login, city, created_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7, NOW())
             RETURNING id, api_key
             """,
-            name, phone, email, pwd_hash, api_key, login
+            name, phone, email, pwd_hash, api_key, login_norm, city
         )
         return {"restaurant_id": row["id"], "api_key": row["api_key"]}
 
 @app.post("/api/v1/merchant/login")
 async def merchant_login(payload: Dict[str, Any] = Body(...)):
-    login = normalize_login(payload.get("login") or "")
+    login = (payload.get("login") or "").strip()
+    login_norm = login.lower() if "@" in login else re.sub(r"\D+", "", login)
     password = (payload.get("password") or "").strip()
-    if not login or not password:
+    if not login_norm or not password:
         raise HTTPException(status_code=400, detail="login and password are required")
 
     async with _pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT id, password_hash, api_key FROM merchants WHERE auth_login=$1",
-            login
+            login_norm
         )
         if not row or not row["password_hash"] or not verify_password(password, row["password_hash"]):
             raise HTTPException(status_code=401, detail="invalid login or password")
@@ -380,7 +376,7 @@ async def get_profile(restaurant_id: int, request: Request):
         await _require_auth(conn, restaurant_id, api_key)
         row = await conn.fetchrow(
             """
-            SELECT id, name, phone, email, address, lat, lng, close_time
+            SELECT id, name, phone, email, address, city, lat, lng, close_time
             FROM merchants WHERE id=$1
             """,
             restaurant_id
@@ -388,8 +384,11 @@ async def get_profile(restaurant_id: int, request: Request):
         if not row:
             raise HTTPException(status_code=404, detail="not found")
         d = dict(row)
-        if isinstance(d.get("close_time"), datetime):
-            d["close_time"] = d["close_time"].strftime("%H:%M")
+        if d.get("close_time") and not isinstance(d["close_time"], str):
+            try:
+                d["close_time"] = d["close_time"].strftime("%H:%M")
+            except Exception:
+                pass
         return d
 
 @app.put("/api/v1/merchant/profile")
@@ -405,6 +404,7 @@ async def update_profile(payload: Dict[str, Any] = Body(...), request: Request =
         name = (payload.get("name") or "").strip() or None
         phone = (payload.get("phone") or "").strip() or None
         address = (payload.get("address") or "").strip() or None
+        city = (payload.get("city") or "").strip() or None
         lat = payload.get("lat", None)
         lng = payload.get("lng", None)
         close_time = payload.get("close_time", None)
@@ -414,12 +414,13 @@ async def update_profile(payload: Dict[str, Any] = Body(...), request: Request =
                 name = COALESCE($2,name),
                 phone = COALESCE($3,phone),
                 address = COALESCE($4,address),
-                lat = COALESCE($5,lat),
-                lng = COALESCE($6,lng),
-                close_time = COALESCE($7,close_time)
+                city = COALESCE($5,city),
+                lat = COALESCE($6,lat),
+                lng = COALESCE($7,lng),
+                close_time = COALESCE($8,close_time)
             WHERE id = $1
             """,
-            restaurant_id, name, phone, address, lat, lng, close_time
+            restaurant_id, name, phone, address, city, lat, lng, close_time
         )
         return {"ok": True}
 
@@ -428,7 +429,6 @@ def _price_cents_to_num(v: Any) -> float:
         return round((int(v) or 0) / 100.0, 2)
     except Exception:
         return 0.0
-
 def _num_to_cents(v: Any) -> int:
     try:
         return int(round(float(v) * 100))
@@ -533,7 +533,6 @@ async def create_offer_api(payload: Dict[str, Any] = Body(...), request: Request
         )
         return {"offer_id": row["id"]}
 
-# Optional alias for upload under /api/v1
 @app.post("/api/v1/upload")
 async def upload_alias(file: UploadFile = File(...)):
     return await upload(file)
