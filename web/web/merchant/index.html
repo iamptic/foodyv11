@@ -73,7 +73,7 @@
 </label>
 <label>Телефон или Email
                 <input name="login" placeholder="+7 900 000 00 00 / you@cafe.com" required=""/>
-</label><label>Город<select id="citySelect" name="city" required="True"><option disabled="" selected="" value="">Выберите город</option><option value="Москва">Москва</option><option value="Санкт-Петербург">Санкт-Петербург</option><option value="Казань">Казань</option><option value="Екатеринбург">Екатеринбург</option><option value="Сочи">Сочи</option><option value="Новосибирск">Новосибирск</option><option value="Нижний Новгород">Нижний Новгород</option><option value="Омск">Омск</option><option value="Томск">Томск</option><option value="other">Другой</option></select></label><label class="full" id="cityCustomWrap" style="display:none">Свой город<input id="cityCustom" name="city_custom" placeholder="Введите город"/></label><label class="full">Адрес (улица, дом)<input name="address" placeholder="Напр., Невский проспект, 10"/></label>
+</label><label>Город<input name="city" placeholder="Напр., Москва"/></label><label class="full">Адрес (улица, дом)<input name="address" placeholder="Напр., Невский проспект, 10"/></label>
 <label>Пароль
                 <input minlength="6" name="password" placeholder="мин. 6 символов" required="" type="password"/>
 </label>
@@ -162,8 +162,6 @@
 <label>Город<input id="profileCity" name="city" placeholder="Напр., Москва"/></label><label class="full">Адрес
               <input name="address" placeholder="Город, улица, дом"/>
 </label>
-
-
 <label>К закрытию в (часы:мин)
               <input name="close_time" placeholder="23:00" type="time"/>
 </label>
