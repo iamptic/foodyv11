@@ -3,6 +3,26 @@
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
   const on = (sel, evt, fn) => { const el = $(sel); if (el) el.addEventListener(evt, fn, { passive: false }); };
 
+  // === Validation helpers (non-intrusive) ===
+  const isEmail = (s) => /.+@.+\..+/.test(String(s).trim());
+  const onlyDigits = (s) => /^\d+$/.test(String(s).trim());
+  function clearFieldError(input){
+    if (!input) return;
+    input.classList.remove('input-error');
+    const msg = input.nextElementSibling;
+    if (msg && msg.classList && msg.classList.contains('field-msg')) msg.remove();
+  }
+  function showFieldError(input, text){
+    if (!input) return;
+    clearFieldError(input);
+    input.classList.add('input-error');
+    const span = document.createElement('div');
+    span.className = 'field-msg';
+    span.textContent = text;
+    input.insertAdjacentElement('afterend', span);
+  }
+
+
   function moneyToCents(v){ try { return Math.round(parseFloat(v||'0')*100) } catch(e){ return 0 } }
   function dtLocalToIso(v){
     if (!v) return null;
@@ -18,17 +38,7 @@
 
   
   // City UI: toggle 'Другой' custom input and remember selection
-  function initCityUI(){
-    const sel = document.getElementById('citySelect');
-    const wrap = document.getElementById('cityCustomWrap');
-    const inp = document.getElementById('cityCustom');
-    if (!sel) return;
-    const apply = () => {
-      const isOther = sel.value === 'other';
-      if (wrap) wrap.style.display = isOther ? '' : 'none';
-      if (inp) inp.required = isOther;
-      if (!isOther && inp) { inp.value = ''; inp.required = false; }
-    };
+  };
     sel.addEventListener('change', apply);
     apply();
   }
@@ -131,33 +141,87 @@ const state = {
   }
   bindAuthToggle();
 
+  
   on('#registerForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-        const citySel = document.getElementById('citySelect');
-  const cityInp = document.getElementById('cityCustom');
-  let city = '';
-  if (citySel) { city = citySel.value === 'other' ? (cityInp ? (cityInp.value||'').trim() : '') : (citySel.value||''); }
-  if (city) try { localStorage.setItem('foody_reg_city', city); } catch(_) {}
-  const address = (fd.get('address') || '').toString().trim();
-const payload = { city: city,  city: city,
-       name: fd.get('name')?.trim(), login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
+    const nameEl = document.querySelector('#registerForm input[name="name"]');
+    const loginEl = document.querySelector('#registerForm input[name="login"]');
+    const passEl  = document.querySelector('#registerForm input[name="password"]');
+    const cityEl  = document.getElementById('regCity');
+    const address = (fd.get('address') || '').toString().trim();
+    const city    = (cityEl?.value || '').toString().trim();
+
+    // Clear previous errors
+    clearFieldError(nameEl); clearFieldError(loginEl); clearFieldError(passEl); clearFieldError(cityEl);
+    const issues = [];
+
+    const name = (nameEl?.value||'').trim();
+    const login = (loginEl?.value||'').trim();
+    const pwd = (passEl?.value||'').trim();
+
+    if (!name) { issues.push('Название ресторана'); showFieldError(nameEl,'Обязательное поле'); }
+    if (!login) { issues.push('Телефон или email'); showFieldError(loginEl,'Обязательное поле'); }
+    else {
+      if (login.includes('@')) {
+        if (!isEmail(login)) { issues.push('Неверный email'); showFieldError(loginEl,'Некорректный email'); }
+      } else {
+        if (!onlyDigits(login)) { issues.push('Телефон: только цифры'); showFieldError(loginEl,'Только цифры'); }
+      }
+    }
+    if (!pwd || pwd.length < 6) { issues.push('Пароль: ≥6 символов'); showFieldError(passEl,'Минимум 6 символов'); }
+
+    if (issues.length) {
+      const box = document.getElementById('registerError');
+      if (box) { box.textContent = 'Исправьте поля: ' + issues.join(', '); box.classList.remove('hidden'); setTimeout(()=>box.classList.add('hidden'), 6000); }
+      return;
+    }
+
+    const payload = { name, login, password: pwd, city };
     try {
       const r = await api('/api/v1/merchant/register_public', { method: 'POST', body: JSON.stringify(payload) });
       if (!r.restaurant_id || !r.api_key) throw new Error('Неожиданный ответ API');
       state.rid = r.restaurant_id; state.key = r.api_key;
       localStorage.setItem('foody_restaurant_id', state.rid);
       localStorage.setItem('foody_key', state.key);
-            try { if (city) { try { localStorage.setItem('foody_city', (fd.get('city')||'').toString().trim()); } catch(_) {}
-      await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({ restaurant_id: state.rid, address: (address || city), city: city }) }); } } catch(e) { console.warn('city save failed', e); }
+      try { if (city) { localStorage.setItem('foody_city', city); localStorage.setItem('foody_reg_city', city); } } catch(_) {}
+
+      // Seed profile with address/city
+      try { await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({ restaurant_id: state.rid, address: (address || city), city }) }); } catch(e) { console.warn('seed profile failed', e); }
+
       showToast('Ресторан создан ✅');
       gate(); activateTab('profile');
-    } catch (err) { console.error(err); showToast('Ошибка регистрации: ' + err.message); }
+    } catch (err) {
+      const msg = String(err.message||'Ошибка регистрации');
+      if (/409|already exists/i.test(msg)) {
+        showFieldError(loginEl, 'Уже зарегистрирован'); 
+        const box = document.getElementById('registerError'); if (box){ box.textContent = 'Такой телефон/email уже зарегистрирован.'; box.classList.remove('hidden'); }
+      } else if (/password/i.test(msg)) {
+        showFieldError(passEl, 'Минимум 6 символов');
+      } else if (/phone|email/i.test(msg)) {
+        showFieldError(loginEl, 'Проверьте ввод');
+      } else {
+        const box = document.getElementById('registerError'); if (box){ box.textContent = msg; box.classList.remove('hidden'); }
+      }
+      console.error(err);
+    }
   });
+
 
   on('#loginForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const loginEl = document.querySelector('#loginForm input[name="login"]');
+    const passEl  = document.querySelector('#loginForm input[name="password"]');
+    clearFieldError(loginEl); clearFieldError(passEl);
+    const l = (loginEl?.value||'').trim();
+    const p = (passEl?.value||'').trim();
+    let bad = false;
+    if (!l) { showFieldError(loginEl,'Обязательное поле'); bad = true; }
+    else { if (l.includes('@')) { if (!/.+@.+\..+/.test(l)) { showFieldError(loginEl,'Некорректный email'); bad = true; } } else if (!/^\d+$/.test(l)) { showFieldError(loginEl,'Только цифры'); bad = true; } }
+    if (!p) { showFieldError(passEl,'Обязательное поле'); bad = true; }
+    if (bad) return;
+
     const payload = { login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
     try {
       const r = await api('/api/v1/merchant/login', { method: 'POST', body: JSON.stringify(payload) });
@@ -166,7 +230,15 @@ const payload = { city: city,  city: city,
       localStorage.setItem('foody_key', state.key);
       showToast('Вход выполнен ✅');
       gate();
-    } catch (err) { console.error(err); showToast('Ошибка входа: ' + err.message); }
+    } catch (err) {
+      const loginEl = document.querySelector('#loginForm input[name="login"]');
+      const passEl  = document.querySelector('#loginForm input[name="password"]');
+      const msg = String(err.message||'');
+      if (/(401|invalid login|Неверный логин)/i.test(msg)) {
+        showFieldError(loginEl, 'Неверный логин или пароль');
+        showFieldError(passEl,  'Неверный логин или пароль');
+      }
+ console.error(err); showToast('Ошибка входа: ' + err.message); }
   });
 
   // ===== PROFILE =====
@@ -191,7 +263,18 @@ const payload = { city: city,  city: city,
     e.preventDefault();
     if (!state.rid || !state.key) return showToast('Сначала войдите');
     const fd = new FormData(e.currentTarget);
+    const phoneEl = document.querySelector('#profileForm input[name="phone"]');
+    const timeEl  = document.querySelector('#profileForm input[name="close_time"]');
+    [phoneEl, timeEl].forEach(clearFieldError);
+    const pIssues = [];
+    const phoneVal = (phoneEl?.value||'').trim();
+    if (phoneVal && !/^\d+$/.test(phoneVal)) { pIssues.push('Телефон: только цифры'); showFieldError(phoneEl,'Только цифры'); }
+    const timeVal = (timeEl?.value||'').trim();
+    if (timeVal && !/^\d{2}:\d{2}$/.test(timeVal)) { pIssues.push('Время: формат ЧЧ:ММ'); showFieldError(timeEl,'Формат 23:00'); }
+    if (pIssues.length) { showToast('Исправьте ошибки в профиле'); return; }
+
     const payload = {
+      city: (fd.get('city')||'').toString().trim() || null,
       restaurant_id: state.rid,
       name: fd.get('name')?.trim(),
       phone: fd.get('phone')?.trim(),
@@ -352,7 +435,7 @@ const payload = { city: city,  city: city,
   bindPhotoPreview();
 
   // Init
-    try { document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', initCityUI) : initCityUI(); } catch(e) {}
+    try { document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', initCityUI) :  } catch(e) {}
 
 document.addEventListener('DOMContentLoaded', () => {
     gate(); gate();
