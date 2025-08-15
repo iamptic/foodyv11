@@ -16,7 +16,23 @@
     } catch(e){ return null; }
   }
 
-  const state = {
+  
+  // City UI: toggle 'Другой' custom input and remember selection
+  function initCityUI(){
+    const sel = document.getElementById('citySelect');
+    const wrap = document.getElementById('cityCustomWrap');
+    const inp = document.getElementById('cityCustom');
+    if (!sel) return;
+    const apply = () => {
+      const isOther = sel.value === 'other';
+      if (wrap) wrap.style.display = isOther ? '' : 'none';
+      if (inp) inp.required = isOther;
+      if (!isOther && inp) { inp.value = ''; inp.required = false; }
+    };
+    sel.addEventListener('change', apply);
+    apply();
+  }
+const state = {
     api: (window.__FOODY__ && window.__FOODY__.FOODY_API) || window.foodyApi || 'https://foodyback-production.up.railway.app',
     rid: localStorage.getItem('foody_restaurant_id') || '',
     key: localStorage.getItem('foody_key') || '',
@@ -112,13 +128,20 @@
   on('#registerForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const payload = { name: fd.get('name')?.trim(), login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
+        const citySel = document.getElementById('citySelect');
+  const cityInp = document.getElementById('cityCustom');
+  let city = '';
+  if (citySel) { city = citySel.value === 'other' ? (cityInp ? (cityInp.value||'').trim() : '') : (citySel.value||''); }
+  if (city) try { localStorage.setItem('foody_reg_city', city); } catch(_) {}
+const payload = { city: city,  city: city,
+       name: fd.get('name')?.trim(), login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
     try {
       const r = await api('/api/v1/merchant/register_public', { method: 'POST', body: JSON.stringify(payload) });
       if (!r.restaurant_id || !r.api_key) throw new Error('Неожиданный ответ API');
       state.rid = r.restaurant_id; state.key = r.api_key;
       localStorage.setItem('foody_restaurant_id', state.rid);
       localStorage.setItem('foody_key', state.key);
+            try { if (city) { await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({ restaurant_id: state.rid, address: city }) }); } } catch(e) { console.warn('city save failed', e); }
       showToast('Ресторан создан ✅');
       gate();
     } catch (err) { console.error(err); showToast('Ошибка регистрации: ' + err.message); }
@@ -146,6 +169,12 @@
       const f = $('#profileForm');
       f.name.value = p.name || ''; f.phone.value = p.phone || '';
       f.address.value = p.address || ''; f.lat.value = p.lat ?? ''; f.lng.value = p.lng ?? '';
+      try {
+        if ((!p.address || String(p.address).trim() === '') && localStorage.getItem('foody_reg_city')) {
+          f.address.value = localStorage.getItem('foody_reg_city');
+        }
+      } catch(_) {}
+
       f.close_time.value = (p.close_time || '').slice(0,5);
       $('#profileDump').textContent = JSON.stringify(p, null, 2);
     } catch (err) { console.warn(err); showToast('Не удалось загрузить профиль: ' + err.message); }
@@ -316,7 +345,9 @@
   bindPhotoPreview();
 
   // Init
-  document.addEventListener('DOMContentLoaded', () => {
+    try { document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', initCityUI) : initCityUI(); } catch(e) {}
+
+document.addEventListener('DOMContentLoaded', () => {
     gate();
   });
 
