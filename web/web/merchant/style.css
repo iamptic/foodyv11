@@ -238,3 +238,13 @@ input:focus, textarea:focus { border-color: var(--brand-2); box-shadow: 0 0 0 2p
 #mode-register:checked ~ .track .thumb{ transform: translateX(100%); }
 .auth-forms { display: grid; gap: 16px; }
 .auth-forms form{ display: grid; gap: 10px; }
+
+/* === Foody: auth forms visibility fallback ===
+   По умолчанию показываем Вход, Регистрацию скрываем.
+   JS выставляет data-mode="register" чтобы переключить.
+*/
+.auth-forms #loginForm { display: grid; }
+.auth-forms #registerForm { display: none; }
+.auth-forms[data-mode="register"] #loginForm { display: none; }
+.auth-forms[data-mode="register"] #registerForm { display: grid; }
+
