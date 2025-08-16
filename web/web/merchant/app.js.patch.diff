@@ -1,0 +1,42 @@
+--- app.js (orig)
++++ app.js (patched)
+@@ -150,6 +150,7 @@
+       localStorage.setItem('foody_key', state.key);
+             try { if (city) { try { localStorage.setItem('foody_city', (fd.get('city')||'').toString().trim()); } catch(_) {}
+       await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({ restaurant_id: state.rid, address: (address || city), city: city }) }); } } catch(e) { console.warn('city save failed', e); }
++      try { await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({ restaurant_id: state.rid, city, address: (fd.get('address')?.toString().trim() || city || '') }) }); } catch(e) { console.warn('city sync failed', e); }
+       showToast('Ресторан создан ✅');
+       gate(); activateTab('profile');
+     } catch (err) { console.error(err); showToast('Ошибка регистрации: ' + err.message); }
+@@ -158,7 +159,13 @@
+   on('#loginForm','submit', async (e) => {
+     e.preventDefault();
+     const fd = new FormData(e.currentTarget);
+-    const payload = { login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
++        const citySel = document.getElementById('citySelect');
++    const cityInp = document.getElementById('cityCustom');
++    let city = '';
++    if (citySel) { city = (citySel.value === 'other') ? (cityInp ? (cityInp.value||'').trim() : '') : (citySel.value||''); }
++    if (!city) { try { city = (fd.get('city')||'').toString().trim(); } catch(_) {} }
++    if (city) try { localStorage.setItem('foody_reg_city', city); } catch(_) {}
++const payload = { login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
+     try {
+       const r = await api('/api/v1/merchant/login', { method: 'POST', body: JSON.stringify(payload) });
+       state.rid = r.restaurant_id; state.key = r.api_key;
+@@ -177,6 +184,8 @@
+       const f = $('#profileForm');
+       f.name.value = p.name || ''; f.phone.value = p.phone || '';
+       f.address.value = p.address || ''; f.lat.value = p.lat ?? ''; f.lng.value = p.lng ?? '';
++      try { if (f.city) f.city.value = p.city || ''; } catch(_) {}
++      try { const pc = document.getElementById('profileCity'); if (pc) pc.value = p.city || ''; } catch(_) {}
+       try {
+         if ((!p.address || String(p.address).trim() === '') && localStorage.getItem('foody_reg_city')) {
+           f.address.value = localStorage.getItem('foody_reg_city');
+@@ -196,6 +205,7 @@
+       name: fd.get('name')?.trim(),
+       phone: fd.get('phone')?.trim(),
+       address: fd.get('address')?.trim(),
++      city: (fd.get('city')?.trim() || document.getElementById('profileCity')?.value?.trim() || ''),
+       close_time: fd.get('close_time') || null,
+     };
+     try {
