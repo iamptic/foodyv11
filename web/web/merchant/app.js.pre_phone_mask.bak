@@ -1,17 +1,4 @@
 
-function normalizePhone(v) {
-  try {
-    let s = String(v || '').trim();
-    let d = s.replace(/\D/g, '');
-    // RU heuristics: local 10 digits -> +7; 8XXXXXXXXXX -> +7XXXXXXXXXX
-    if (d.length === 11 && d.startsWith('8')) d = '7' + d.slice(1);
-    if (d.length === 10) d = '7' + d;
-    // If already starts with 7 and length >= 11, keep; else just return with '+' prefix if we have digits
-    return d ? ('+' + d) : '';
-  } catch (e) { return String(v || '').trim(); }
-}
-
-
 
 function validatePhoneValue(v) {
   if (!v) return 'Укажите телефон';
@@ -20,6 +7,16 @@ function validatePhoneValue(v) {
   if (digits.length < 10) return 'Телефон: минимум 10 цифр';
   return '';
 }
+function normalizePhone(v) {
+  try {
+    let s = String(v||'').trim();
+    let d = s.replace(/\D/g, '');
+    // RU heuristic: 11 цифр и начинается с 8 -> +7
+    if (d.length === 11 && d.startsWith('8')) d = '7' + d.slice(1);
+    if (d.length >= 11 && d[0] != '+'):
+        pass
+    return (s.startsWith('+') ? '+' : (d.length >= 11 ? '+' : '')) + d;
+  } catch(_) { return String(v||'').trim(); }
 }
 function validateLoginValue(v) {
   if (!v) return 'Введите телефон или email';
@@ -199,8 +196,8 @@ const citySel = document.getElementById('citySelect');
 
     const payload = {      city: city,
       name: fd.get('name')?.toString().trim(),
-      login: normalizePhone(fd.get('phone')?.toString().trim()).trim()),
-      phone: normalizePhone(fd.get('phone')?.toString().trim()).trim()),
+      login: normalizePhone(fd.get('phone')?.toString().trim()),
+      phone: normalizePhone(fd.get('phone')?.toString().trim()),
       password: fd.get('password')?.toString().trim()};
 
     if (!payload.password || payload.password.length < 6) { showToast('Пароль: минимум 6 символов'); setLoading(_btn,false); return; }
@@ -215,7 +212,7 @@ const citySel = document.getElementById('citySelect');
       localStorage.setItem('foody_key', state.key);
 
       try {
-        await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({ restaurant_id: state.rid, city, address, phone: normalizePhone(fd.get('phone')?.toString().trim()).trim()) }) });
+        await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({ restaurant_id: state.rid, city, address, phone: normalizePhone(fd.get('phone')?.toString().trim()) }) });
       } catch (e2) { console.warn('profile sync failed', e2); }
 
       showToast('Ресторан создан ✅');
@@ -500,53 +497,3 @@ function initPasswordToggles(scope=document) {
 }
 
 document.addEventListener('DOMContentLoaded', () => initPasswordToggles(document));
-
-
-function formatPhoneMask(v) {
-  let d = String(v||'').replace(/\D/g, '');
-  if (!d) return '';
-  if (d[0] === '8') d = '7' + d.slice(1);
-  if (d[0] !== '7') {
-    // assume local RU number, prefix with 7 when we have 10 digits
-    if (d.length <= 10) d = '7' + d;
-  }
-  const body = d.slice(1); // after country code
-  let out = '+7';
-  if (body.length > 0) out += ' (' + body.substring(0,3);
-  if (body.length >= 3) out += ')';
-  if (body.length > 3) out += ' ' + body.substring(3,6);
-  if (body.length >= 6) out += '-' + body.substring(6,8);
-  if (body.length >= 8) out += '-' + body.substring(8,10);
-  return out;
-}
-
-function bindPhoneMask(input) {
-  if (!input || input.dataset.maskBound) return;
-  const apply = () => {
-    const pos = input.selectionStart;
-    const before = input.value;
-    input.value = formatPhoneMask(input.value);
-    // naive caret keep: move to end if changed significantly
-    if (document.activeElement === input) {
-      try {
-        const to = input.value.length;
-        input.setSelectionRange(to, to);
-      } catch(_) {}
-    }
-  };
-  input.addEventListener('input', apply, { passive: true });
-  input.addEventListener('focus', apply, { passive: true });
-  input.addEventListener('blur', () => {
-    // On blur, if only "+7" present with no digits, clear field
-    const digits = input.value.replace(/\D/g, '');
-    if (!digits || digits === '7') input.value = '';
-  }, { passive: true });
-  input.dataset.maskBound = '1';
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  const regPhone = document.querySelector('#registerForm input[name="phone"]');
-  if (regPhone) bindPhoneMask(regPhone);
-  const profPhone = document.querySelector('#profileForm input[name="phone"]');
-  if (profPhone) bindPhoneMask(profPhone);
-});
