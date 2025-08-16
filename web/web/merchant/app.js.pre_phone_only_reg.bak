@@ -1,23 +1,4 @@
 
-
-function validatePhoneValue(v) {
-  if (!v) return 'Укажите телефон';
-  v = String(v).trim();
-  const digits = v.replace(/\D/g, '');
-  if (digits.length < 10) return 'Телефон: минимум 10 цифр';
-  return '';
-}
-function normalizePhone(v) {
-  try {
-    let s = String(v||'').trim();
-    let d = s.replace(/\D/g, '');
-    // RU heuristic: 11 цифр и начинается с 8 -> +7
-    if (d.length === 11 && d.startsWith('8')) d = '7' + d.slice(1);
-    if (d.length >= 11 && d[0] != '+'):
-        pass
-    return (s.startsWith('+') ? '+' : (d.length >= 11 ? '+' : '')) + d;
-  } catch(_) { return String(v||'').trim(); }
-}
 function validateLoginValue(v) {
   if (!v) return 'Введите телефон или email';
   v = v.toString().trim();
@@ -184,9 +165,7 @@ const state = {
     const _btn = e.currentTarget.querySelector('button[type="submit"]');
     setLoading(_btn, true, 'Регистрируем…');
 
-        const _phoneErr = validatePhoneValue(fd.get('phone'));
-    if (_phoneErr) { showToast(_phoneErr); setLoading(_btn,false); return; }
-const citySel = document.getElementById('citySelect');
+    const citySel = document.getElementById('citySelect');
     const cityInp = document.getElementById('cityCustom');
     let city = '';
     if (citySel) { city = (citySel.value === 'other') ? (cityInp ? (cityInp.value||'').trim() : '') : (citySel.value||''); }
@@ -194,11 +173,12 @@ const citySel = document.getElementById('citySelect');
     if (city) try { localStorage.setItem('foody_reg_city', city); } catch(_) {}
     const address = (fd.get('address') || '').toString().trim();
 
-    const payload = {      city: city,
+    const payload = {
+      city: city,
       name: fd.get('name')?.toString().trim(),
-      login: normalizePhone(fd.get('phone')?.toString().trim()),
-      phone: normalizePhone(fd.get('phone')?.toString().trim()),
-      password: fd.get('password')?.toString().trim()};
+      login: fd.get('login')?.toString().trim(),
+      password: fd.get('password')?.toString().trim()
+    };
 
     if (!payload.password || payload.password.length < 6) { showToast('Пароль: минимум 6 символов'); setLoading(_btn,false); return; }
     const _loginErr = validateLoginValue(payload.login);
@@ -212,7 +192,11 @@ const citySel = document.getElementById('citySelect');
       localStorage.setItem('foody_key', state.key);
 
       try {
-        await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({ restaurant_id: state.rid, city, address, phone: normalizePhone(fd.get('phone')?.toString().trim()) }) });
+        await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({
+          restaurant_id: state.rid,
+          city,
+          address
+        }) });
       } catch (e2) { console.warn('profile sync failed', e2); }
 
       showToast('Ресторан создан ✅');
@@ -231,9 +215,9 @@ const citySel = document.getElementById('citySelect');
     const fd = new FormData(e.currentTarget);
     const _btn = e.currentTarget.querySelector('button[type="submit"]');
     setLoading(_btn, true, 'Входим…');
-    const _loginErr = validateLoginValue(fd.get('phone'));
+    const _loginErr = validateLoginValue(fd.get('login'));
     if (_loginErr) { showToast(_loginErr); setLoading(_btn,false); return; }
-    const payload = { login: fd.get('phone')?.toString().trim(), password: fd.get('password')?.toString().trim() };
+    const payload = { login: fd.get('login')?.toString().trim(), password: fd.get('password')?.toString().trim() };
     try {
       const r = await api('/api/v1/merchant/login', { method: 'POST', body: JSON.stringify(payload) });
       state.rid = r.restaurant_id; state.key = r.api_key;
