@@ -1,3 +1,31 @@
+
+function validateLoginValue(v) {
+  if (!v) return 'Введите телефон или email';
+  v = v.toString().trim();
+  if (v.includes('@')) {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return 'Некорректный email';
+  } else {
+    const digits = v.replace(/\D/g,''); if (digits.length < 10) return 'Укажите номер телефона (10+ цифр)';
+  }
+  return '';
+}
+
+
+// --- UX helpers ---
+function setLoading(btn, on, textOn) {
+  try {
+    if (!btn) return;
+    if (!btn.dataset) btn.dataset = {};
+    if (on) {
+      btn.dataset._text = btn.textContent;
+      if (textOn) btn.textContent = textOn;
+      btn.disabled = true;
+    } else {
+      if (btn.dataset._text) btn.textContent = btn.dataset._text;
+      btn.disabled = false;
+    }
+  } catch(_) {}
+}
 (() => { console.log('[Foody] app.js (auth slider) loaded');
   const $ = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
@@ -134,38 +162,62 @@ const state = {
   on('#registerForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-        const citySel = document.getElementById('citySelect');
-  const cityInp = document.getElementById('cityCustom');
-  let city = '';
-  if (citySel) { city = citySel.value === 'other' ? (cityInp ? (cityInp.value||'').trim() : '') : (citySel.value||''); }
-  if (city) try { localStorage.setItem('foody_reg_city', city); } catch(_) {}
-  const address = (fd.get('address') || '').toString().trim();
-const payload = { city: city,  city: city,
-       name: fd.get('name')?.trim(), login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
+    const _btn = e.currentTarget.querySelector('button[type="submit"]');
+    setLoading(_btn, true, 'Регистрируем…');
+
+    const citySel = document.getElementById('citySelect');
+    const cityInp = document.getElementById('cityCustom');
+    let city = '';
+    if (citySel) { city = (citySel.value === 'other') ? (cityInp ? (cityInp.value||'').trim() : '') : (citySel.value||''); }
+    if (!city) { try { city = (fd.get('city')||'').toString().trim(); } catch(_) {} }
+    if (city) try { localStorage.setItem('foody_reg_city', city); } catch(_) {}
+    const address = (fd.get('address') || '').toString().trim();
+
+    const payload = {
+      city: city,
+      name: fd.get('name')?.toString().trim(),
+      login: fd.get('login')?.toString().trim(),
+      password: fd.get('password')?.toString().trim()
+    };
+
+    if (!payload.password || payload.password.length < 6) { showToast('Пароль: минимум 6 символов'); setLoading(_btn,false); return; }
+    const _loginErr = validateLoginValue(payload.login);
+    if (_loginErr) { showToast(_loginErr); setLoading(_btn,false); return; }
+
     try {
       const r = await api('/api/v1/merchant/register_public', { method: 'POST', body: JSON.stringify(payload) });
       if (!r.restaurant_id || !r.api_key) throw new Error('Неожиданный ответ API');
       state.rid = r.restaurant_id; state.key = r.api_key;
       localStorage.setItem('foody_restaurant_id', state.rid);
       localStorage.setItem('foody_key', state.key);
-            try { if (city) { try { localStorage.setItem('foody_city', (fd.get('city')||'').toString().trim()); } catch(_) {}
-      await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({ restaurant_id: state.rid, address: (address || city), city: city }) }); } } catch(e) { console.warn('city save failed', e); }
-      try { await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({ restaurant_id: state.rid, city, address: (fd.get('address')?.toString().trim() || city || '') }) }); } catch(e) { console.warn('city sync failed', e); }
+
+      try {
+        await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({
+          restaurant_id: state.rid,
+          city,
+          address
+        }) });
+      } catch (e2) { console.warn('profile sync failed', e2); }
+
       showToast('Ресторан создан ✅');
-      gate(); activateTab('profile');
-    } catch (err) { console.error(err); showToast('Ошибка регистрации: ' + err.message); }
+      setLoading(_btn,false);
+      gate();
+      activateTab('profile');
+    } catch (err) {
+      setLoading(_btn,false);
+      console.error(err);
+      showToast('Ошибка регистрации: ' + err.message);
+    }
   });
 
   on('#loginForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-        const citySel = document.getElementById('citySelect');
-    const cityInp = document.getElementById('cityCustom');
-    let city = '';
-    if (citySel) { city = (citySel.value === 'other') ? (cityInp ? (cityInp.value||'').trim() : '') : (citySel.value||''); }
-    if (!city) { try { city = (fd.get('city')||'').toString().trim(); } catch(_) {} }
-    if (city) try { localStorage.setItem('foody_reg_city', city); } catch(_) {}
-const payload = { login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
+    const _btn = e.currentTarget.querySelector('button[type="submit"]');
+    setLoading(_btn, true, 'Входим…');
+    const _loginErr = validateLoginValue(fd.get('login'));
+    if (_loginErr) { showToast(_loginErr); setLoading(_btn,false); return; }
+    const payload = { login: fd.get('login')?.toString().trim(), password: fd.get('password')?.toString().trim() };
     try {
       const r = await api('/api/v1/merchant/login', { method: 'POST', body: JSON.stringify(payload) });
       state.rid = r.restaurant_id; state.key = r.api_key;
@@ -369,3 +421,25 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
 })();
+
+
+function initPasswordToggles(scope=document) {
+  try {
+    const inputs = scope.querySelectorAll('form input[type="password"]');
+    inputs.forEach(inp => {
+      if (inp.dataset.hasToggle) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pw-toggle';
+      btn.textContent = 'Показать';
+      btn.addEventListener('click', () => {
+        const show = inp.type === 'password';
+        inp.type = show ? 'text' : 'password';
+        btn.textContent = show ? 'Скрыть' : 'Показать';
+      });
+      inp.insertAdjacentElement('afterend', btn);
+      inp.dataset.hasToggle = '1';
+    });
+  } catch(e) { console.warn('pw toggle init failed', e); }
+}
+document.addEventListener('DOMContentLoaded', () => initPasswordToggles(document));
