@@ -1,3 +1,31 @@
+
+function validateLoginValue(v) {
+  if (!v) return 'Введите телефон или email';
+  v = v.toString().trim();
+  if (v.includes('@')) {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return 'Некорректный email';
+  } else {
+    const digits = v.replace(/\D/g,''); if (digits.length < 10) return 'Укажите номер телефона (10+ цифр)';
+  }
+  return '';
+}
+
+
+// --- UX helpers ---
+function setLoading(btn, on, textOn) {
+  try {
+    if (!btn) return;
+    if (!btn.dataset) btn.dataset = {};
+    if (on) {
+      btn.dataset._text = btn.textContent;
+      if (textOn) btn.textContent = textOn;
+      btn.disabled = true;
+    } else {
+      if (btn.dataset._text) btn.textContent = btn.dataset._text;
+      btn.disabled = false;
+    }
+  } catch(_) {}
+}
 (() => { console.log('[Foody] app.js (auth slider) loaded');
   const $ = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
@@ -134,32 +162,62 @@ const state = {
   on('#registerForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const form = e.currentTarget;
-        const citySel = document.getElementById('citySelect');
-  const cityInp = document.getElementById('cityCustom');
-  let city = '';
-  if (citySel) { city = citySel.value === 'other' ? (cityInp ? (cityInp.value||'').trim() : '') : (citySel.value||''); }
-  if (city) try { localStorage.setItem('foody_reg_city', city); } catch(_) {}
-  const address = (fd.get('address') || '').toString().trim();
-const payload = { city: city,  city: city,
-       name: fd.get('name')?.trim(), login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
+    const _btn = e.currentTarget.querySelector('button[type="submit"]');
+    setLoading(_btn, true, 'Регистрируем…');
+
+    const citySel = document.getElementById('citySelect');
+    const cityInp = document.getElementById('cityCustom');
+    let city = '';
+    if (citySel) { city = (citySel.value === 'other') ? (cityInp ? (cityInp.value||'').trim() : '') : (citySel.value||''); }
+    if (!city) { try { city = (fd.get('city')||'').toString().trim(); } catch(_) {} }
+    if (city) try { localStorage.setItem('foody_reg_city', city); } catch(_) {}
+    const address = (fd.get('address') || '').toString().trim();
+
+    const payload = {
+      city: city,
+      name: fd.get('name')?.toString().trim(),
+      login: fd.get('login')?.toString().trim(),
+      password: fd.get('password')?.toString().trim()
+    };
+
+    if (!payload.password || payload.password.length < 6) { showToast('Пароль: минимум 6 символов'); setLoading(_btn,false); return; }
+    const _loginErr = validateLoginValue(payload.login);
+    if (_loginErr) { showToast(_loginErr); setLoading(_btn,false); return; }
+
     try {
       const r = await api('/api/v1/merchant/register_public', { method: 'POST', body: JSON.stringify(payload) });
       if (!r.restaurant_id || !r.api_key) throw new Error('Неожиданный ответ API');
       state.rid = r.restaurant_id; state.key = r.api_key;
       localStorage.setItem('foody_restaurant_id', state.rid);
       localStorage.setItem('foody_key', state.key);
-            try { if (city) { try { localStorage.setItem('foody_city', (fd.get('city')||'').toString().trim()); } catch(_) {}
-      await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({ restaurant_id: state.rid, address: (address || city), city: city }) }); } } catch(e) { console.warn('city save failed', e); }
+
+      try {
+        await api('/api/v1/merchant/profile', { method: 'PUT', body: JSON.stringify({
+          restaurant_id: state.rid,
+          city,
+          address
+        }) });
+      } catch (e2) { console.warn('profile sync failed', e2); }
+
       showToast('Ресторан создан ✅');
-      gate(); activateTab('profile');
-    } catch (err) { console.error(err); showToast('Ошибка регистрации: ' + err.message); }
+      setLoading(_btn,false);
+      gate();
+      activateTab('profile');
+    } catch (err) {
+      setLoading(_btn,false);
+      console.error(err);
+      showToast('Ошибка регистрации: ' + err.message);
+    }
   });
 
   on('#loginForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const payload = { login: fd.get('login')?.trim(), password: fd.get('password')?.trim() };
+    const _btn = e.currentTarget.querySelector('button[type="submit"]');
+    setLoading(_btn, true, 'Входим…');
+    const _loginErr = validateLoginValue(fd.get('login'));
+    if (_loginErr) { showToast(_loginErr); setLoading(_btn,false); return; }
+    const payload = { login: fd.get('login')?.toString().trim(), password: fd.get('password')?.toString().trim() };
     try {
       const r = await api('/api/v1/merchant/login', { method: 'POST', body: JSON.stringify(payload) });
       state.rid = r.restaurant_id; state.key = r.api_key;
@@ -177,7 +235,11 @@ const payload = { city: city,  city: city,
       const p = await api(`/api/v1/merchant/profile?restaurant_id=${encodeURIComponent(state.rid)}`);
       const f = $('#profileForm');
       f.name.value = p.name || ''; f.phone.value = p.phone || '';
-      f.address.value = p.address || ''; f.lat.value = p.lat ?? ''; f.lng.value = p.lng ?? '';
+      f.address.value = p.address || '';
+      try { if (f.lat) try { if (f.lat) f.lat.value = p.lat ?? ''; } catch(_) {} } catch(_) {}
+      try { if (f.lng) try { if (f.lng) f.lng.value = p.lng ?? ''; } catch(_) {} } catch(_) {}
+      try { if (f.city) f.city.value = p.city || ''; } catch(_) {}
+      try { const pc = document.getElementById('profileCity'); if (pc) pc.value = p.city || ''; } catch(_) {}
       try {
         if ((!p.address || String(p.address).trim() === '') && localStorage.getItem('foody_reg_city')) {
           f.address.value = localStorage.getItem('foody_reg_city');
@@ -197,6 +259,7 @@ const payload = { city: city,  city: city,
       name: fd.get('name')?.trim(),
       phone: fd.get('phone')?.trim(),
       address: fd.get('address')?.trim(),
+      city: (fd.get('city')?.trim() || document.getElementById('profileCity')?.value?.trim() || ''),
       close_time: fd.get('close_time') || null,
     };
     try {
@@ -238,8 +301,7 @@ const payload = { city: city,  city: city,
     try {
       await api('/api/v1/merchant/offers', { method: 'POST', body: JSON.stringify(payload) });
       showToast('Оффер создан ✅');
-      try { form && form.reset && form.reset(); } catch(_) {}
-      try { const w=document.getElementById('photoPreviewWrap'); const i=document.getElementById('photoPreview'); const h=document.getElementById('image_url'); if(w) w.classList.add('hidden'); if(i) i.removeAttribute('src'); if(h) h.value=''; } catch(_) {}
+      e.currentTarget.reset();
       loadOffers();
       activateTab('offers');
     toggleLogout(true);
@@ -353,21 +415,6 @@ const payload = { city: city,  city: city,
   }
   bindPhotoPreview();
 
-  // Guard against double-open of file dialog
-  try {
-    const __photo = document.getElementById('photo');
-    if (__photo && !__photo._doubleGuard) {
-      __photo._doubleGuard = true;
-      let __last = 0;
-      __photo.addEventListener('click', (ev) => {
-        const now = Date.now();
-        if (now - __last < 700) { ev.stopImmediatePropagation(); ev.preventDefault(); return; }
-        __last = now;
-      }, true);
-    }
-  } catch(e) { console.warn('photo double-guard failed', e); }
-
-
   // Init
     try { document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', initCityUI) : initCityUI(); } catch(e) {}
 
@@ -377,57 +424,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
 })();
 
-function dtLocalToIso(v){
-  try{
-    if(!v) return null;
-    // Accepts 'YYYY-MM-DDTHH:mm' OR plain 'HH:mm' combined with today
-    if(/^\d{2}:\d{2}$/.test(v)){
-      const now=new Date(); const [h,m]=v.split(':').map(Number);
-      now.setHours(h,m,0,0);
-      return now.toISOString();
-    }
-    const d=new Date(v);
-    return isNaN(d)? null : d.toISOString();
-  }catch(_){return null;}
+
+function initPasswordToggles(scope=document) {
+  try {
+    const inputs = scope.querySelectorAll('form input[type="password"]');
+    inputs.forEach(inp => {
+      if (inp.dataset.hasToggle) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pw-toggle';
+      btn.textContent = 'Показать';
+      btn.addEventListener('click', () => {
+        const show = inp.type === 'password';
+        inp.type = show ? 'text' : 'password';
+        btn.textContent = show ? 'Скрыть' : 'Показать';
+      });
+      inp.insertAdjacentElement('afterend', btn);
+      inp.dataset.hasToggle = '1';
+    });
+  } catch(e) { console.warn('pw toggle init failed', e); }
 }
-function isoToLocalInput(iso){
-  if(!iso) return '';
-  const d = new Date(iso);
-  const pad=n=>String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-function addMinutesToIso(iso, mins){
-  const d = iso ? new Date(iso) : new Date();
-  d.setMinutes(d.getMinutes()+mins);
-  return d.toISOString();
-}
-function todayAt(hour, min){
-  const d = new Date();
-  d.setHours(hour, min, 0, 0);
-  return d.toISOString();
-}
-function applyCloseTime(){
-  try{
-    const f=document.querySelector('#profileForm');
-    const ct = f ? (f.querySelector('[name="close_time"]')?.value || '') : '';
-    if(!ct) { showToast('Укажите время закрытия в профиле'); return null; }
-    const [h,m]=ct.split(':').map(Number);
-    return todayAt(h||21, m||0);
-  }catch(e){ return null; }
-}
-function initQuickTimeButtons(){
-  const exp = document.getElementById('expires_at');
-  if(!exp) return;
-  const setExp = (iso)=>{ if(!iso) return; exp.value = isoToLocalInput(iso); };
-  const b30 = document.getElementById('btnPlus30');
-  const b60 = document.getElementById('btnPlus60');
-  const b120= document.getElementById('btnPlus120');
-  const b2100= document.getElementById('btnToday2100');
-  const bClose= document.getElementById('btnCloseTime');
-  if(b30 && !b30._bound){ b30._bound=true; b30.addEventListener('click', ()=> setExp(addMinutesToIso(dtLocalToIso(exp.value), 30))); }
-  if(b60 && !b60._bound){ b60._bound=true; b60.addEventListener('click', ()=> setExp(addMinutesToIso(dtLocalToIso(exp.value), 60))); }
-  if(b120&& !b120._bound){ b120._bound=true; b120.addEventListener('click',()=> setExp(addMinutesToIso(dtLocalToIso(exp.value),120))); }
-  if(b2100&& !b2100._bound){ b2100._bound=true; b2100.addEventListener('click',()=> setExp(todayAt(21,0))); }
-  if(bClose&& !bClose._bound){ bClose._bound=true; bClose.addEventListener('click',()=> { const iso=applyCloseTime(); if(iso) setExp(iso); }); }
-}
-document.addEventListener('DOMContentLoaded', initQuickTimeButtons);
+document.addEventListener('DOMContentLoaded', () => initPasswordToggles(document));
