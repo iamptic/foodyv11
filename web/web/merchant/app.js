@@ -235,7 +235,9 @@ const state = {
       const p = await api(`/api/v1/merchant/profile?restaurant_id=${encodeURIComponent(state.rid)}`);
       const f = $('#profileForm');
       f.name.value = p.name || ''; f.phone.value = p.phone || '';
-      f.address.value = p.address || ''; f.lat.value = p.lat ?? ''; f.lng.value = p.lng ?? '';
+      f.address.value = p.address || '';
+      try { if (f.lat) try { if (f.lat) f.lat.value = p.lat ?? ''; } catch(_) {} } catch(_) {}
+      try { if (f.lng) try { if (f.lng) f.lng.value = p.lng ?? ''; } catch(_) {} } catch(_) {}
       try { if (f.city) f.city.value = p.city || ''; } catch(_) {}
       try { const pc = document.getElementById('profileCity'); if (pc) pc.value = p.city || ''; } catch(_) {}
       try {
