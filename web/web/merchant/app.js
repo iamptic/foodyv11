@@ -116,18 +116,20 @@ const state = {
     const modeLogin = $('#mode-login');
     const modeReg = $('#mode-register');
     const forms = $('.auth-forms');
-    if (!loginForm || !regForm || !forms) return;
     function apply(){
-      const isLogin = modeLogin ? modeLogin.checked : true;
-      if (loginForm) loginForm.style.display = isLogin ? 'grid' : 'none';
-      if (regForm) regForm.style.display = isLogin ? 'none' : 'grid';
-      try { forms.setAttribute('data-mode', isLogin ? 'login' : 'register'); } catch(_) {}
+      if (modeLogin && modeLogin.checked) {
+        loginForm.style.display='grid'; regForm.style.display='none';
+        forms.setAttribute('data-mode','login');
+      } else {
+        regForm.style.display='grid'; loginForm.style.display='none';
+        forms.setAttribute('data-mode','register');
+      }
     }
     if (modeLogin) modeLogin.addEventListener('change', apply);
     if (modeReg) modeReg.addEventListener('change', apply);
     apply();
-}
-(document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', bindAuthToggle, { once: true }) : bindAuthToggle());
+  }
+  bindAuthToggle();
 
   on('#registerForm','submit', async (e) => {
     e.preventDefault();
