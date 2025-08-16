@@ -27,13 +27,17 @@
 
   // Tabs
   function activateTab(tab) {
-    $$('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-    $$('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-    $$('.pane').forEach(p => p.classList.toggle('active', p.id === tab));
-    if (tab === 'offers') loadOffers();
-    if (tab === 'profile') loadProfile();
-    if (tab === 'export') updateCreds();
-    if (tab === 'create') initCreateTab();
+    try {
+      $$('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+      $$('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+      const panes = $$('.pane');
+      if (panes.length) panes.forEach(p => p.classList.toggle('active', p.id === tab));
+      else { const t = document.getElementById(tab); if (t) t.classList.add('active'); }
+      if (tab === 'offers') loadOffers();
+      if (tab === 'profile') loadProfile();
+      if (tab === 'export') updateCreds();
+      if (tab === 'create') initCreateTab();
+    } catch (e) { console.warn('activateTab failed', e); }
   }
   on('#tabs','click', (e) => { const btn = e.target.closest('.seg-btn'); if (btn?.dataset.tab) activateTab(btn.dataset.tab); });
   on('.bottom-nav','click', (e) => { const btn = e.target.closest('.nav-btn'); if (btn?.dataset.tab) activateTab(btn.dataset.tab); });
@@ -104,15 +108,22 @@
 
   // ===== AUTH (slider) =====
   function bindAuthToggle(){
-    const loginForm = $('#loginForm'), regForm = $('#registerForm');
-    const modeLogin = $('#mode-login'), modeReg = $('#mode-register');
+    const loginForm = $('#loginForm');
+    const regForm = $('#registerForm');
+    const modeLogin = $('#mode-login');
+    const modeReg = $('#mode-register');
     const forms = $('.auth-forms');
     function apply(){
-      if (modeLogin && modeLogin.checked) { loginForm.style.display='grid'; regForm.style.display='none'; forms?.setAttribute('data-mode','login'); }
-      else { regForm.style.display='grid'; loginForm.style.display='none'; forms?.setAttribute('data-mode','register'); }
-      $('#loginError')?.classList.add('hidden'); $('#registerError')?.classList.add('hidden');
+      const showLogin = modeLogin ? modeLogin.checked : true;
+      if (loginForm) loginForm.style.display = showLogin ? 'grid' : 'none';
+      if (regForm) regForm.style.display = showLogin ? 'none' : 'grid';
+      if (forms) forms.setAttribute('data-mode', showLogin ? 'login' : 'register');
+      const le = $('#loginError'); if (le) le.classList.add('hidden');
+      const re = $('#registerError'); if (re) re.classList.add('hidden');
     }
-    modeLogin?.addEventListener('change', apply); modeReg?.addEventListener('change', apply); apply();
+    if (modeLogin) modeLogin.addEventListener('change', apply);
+    if (modeReg) modeReg.addEventListener('change', apply);
+    try { apply(); } catch(e) { console.warn('auth toggle init failed', e); }
   }
   bindAuthToggle();
 
@@ -293,5 +304,5 @@
     } catch (err) { console.error(err); showToast('Ошибка экспорта: ' + err.message); }
   });
 
-  document.addEventListener('DOMContentLoaded', () => { gate(); });
+  document.addEventListener('DOMContentLoaded', () => { try { const ok = gate(); if (!ok) activateTab('auth'); } catch(e){ console.error(e); const a = document.getElementById('auth'); if (a) { a.classList.add('active'); } } });
 })();
