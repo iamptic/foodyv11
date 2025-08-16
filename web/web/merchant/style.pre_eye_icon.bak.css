@@ -250,17 +250,3 @@ input:focus, textarea:focus { border-color: var(--brand-2); box-shadow: 0 0 0 2p
   border-radius: 8px;
   cursor: pointer;
 }
-
-/* Password field with eye icon */
-.pw-field{ position: relative; display: grid; align-items: center; }
-.pw-field input{ padding-right: 42px; }
-.pw-toggle-icon{
-  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-  border: 0; background: transparent; padding: 4px; cursor: pointer;
-  line-height: 0;
-}
-.pw-toggle-icon svg{ width: 20px; height: 20px; opacity: .6; }
-.pw-toggle-icon:hover svg{ opacity: .9; }
-.pw-toggle-icon .eye-off{ display: none; }
-.pw-toggle-icon[aria-pressed="true"] .eye{ display: none; }
-.pw-toggle-icon[aria-pressed="true"] .eye-off{ display: inline; }
