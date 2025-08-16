@@ -284,6 +284,7 @@ const state = {
 
   on('#offerForm','submit', async (e) => {
     e.preventDefault();
+    const form = e.currentTarget;
     if (!state.rid || !state.key) return showToast('Сначала войдите');
     const fd = new FormData(e.currentTarget);
     const payload = {
@@ -301,7 +302,7 @@ const state = {
     try {
       await api('/api/v1/merchant/offers', { method: 'POST', body: JSON.stringify(payload) });
       showToast('Оффер создан ✅');
-      e.currentTarget.reset();
+      try { (form || document.getElementById('offerForm'))?.reset(); } catch(_) {}
       loadOffers();
       activateTab('offers');
     toggleLogout(true);
@@ -397,6 +398,16 @@ const state = {
       const el = document.getElementById('photo');
       if (!el || el._previewBound) return;
       el._previewBound = true;
+      if (!el._clickDebounced) {
+        el.addEventListener('click', (evt) => {
+          const now = Date.now();
+          if (el._lastClick && (now - el._lastClick) < 800) {
+            evt.preventDefault(); evt.stopImmediatePropagation(); return false;
+          }
+          el._lastClick = now;
+        }, { capture: true });
+        el._clickDebounced = true;
+      }
       el.addEventListener('change', () => {
         if (document.querySelector('.filepond--root')) return; // FilePond handles previews
         const f = el.files && el.files[0];
