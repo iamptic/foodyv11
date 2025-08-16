@@ -239,14 +239,5 @@ input:focus, textarea:focus { border-color: var(--brand-2); box-shadow: 0 0 0 2p
 .auth-forms { display: grid; gap: 16px; }
 .auth-forms form{ display: grid; gap: 10px; }
 
-
-/* Password toggle button */
-.pw-toggle{
-  margin-left: 8px;
-  padding: 6px 10px;
-  font-size: 12px;
-  border: 1px solid var(--border-color, #ddd);
-  background: var(--surface-2, #f8f8f8);
-  border-radius: 8px;
-  cursor: pointer;
-}
+.quick-time{ display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+.btn.small{ padding:6px 10px; font-size:12px; }

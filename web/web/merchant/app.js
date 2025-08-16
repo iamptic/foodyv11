@@ -376,3 +376,58 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
 })();
+
+function dtLocalToIso(v){
+  try{
+    if(!v) return null;
+    // Accepts 'YYYY-MM-DDTHH:mm' OR plain 'HH:mm' combined with today
+    if(/^\d{2}:\d{2}$/.test(v)){
+      const now=new Date(); const [h,m]=v.split(':').map(Number);
+      now.setHours(h,m,0,0);
+      return now.toISOString();
+    }
+    const d=new Date(v);
+    return isNaN(d)? null : d.toISOString();
+  }catch(_){return null;}
+}
+function isoToLocalInput(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  const pad=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function addMinutesToIso(iso, mins){
+  const d = iso ? new Date(iso) : new Date();
+  d.setMinutes(d.getMinutes()+mins);
+  return d.toISOString();
+}
+function todayAt(hour, min){
+  const d = new Date();
+  d.setHours(hour, min, 0, 0);
+  return d.toISOString();
+}
+function applyCloseTime(){
+  try{
+    const f=document.querySelector('#profileForm');
+    const ct = f ? (f.querySelector('[name="close_time"]')?.value || '') : '';
+    if(!ct) { showToast('Укажите время закрытия в профиле'); return null; }
+    const [h,m]=ct.split(':').map(Number);
+    return todayAt(h||21, m||0);
+  }catch(e){ return null; }
+}
+function initQuickTimeButtons(){
+  const exp = document.getElementById('expires_at');
+  if(!exp) return;
+  const setExp = (iso)=>{ if(!iso) return; exp.value = isoToLocalInput(iso); };
+  const b30 = document.getElementById('btnPlus30');
+  const b60 = document.getElementById('btnPlus60');
+  const b120= document.getElementById('btnPlus120');
+  const b2100= document.getElementById('btnToday2100');
+  const bClose= document.getElementById('btnCloseTime');
+  if(b30 && !b30._bound){ b30._bound=true; b30.addEventListener('click', ()=> setExp(addMinutesToIso(dtLocalToIso(exp.value), 30))); }
+  if(b60 && !b60._bound){ b60._bound=true; b60.addEventListener('click', ()=> setExp(addMinutesToIso(dtLocalToIso(exp.value), 60))); }
+  if(b120&& !b120._bound){ b120._bound=true; b120.addEventListener('click',()=> setExp(addMinutesToIso(dtLocalToIso(exp.value),120))); }
+  if(b2100&& !b2100._bound){ b2100._bound=true; b2100.addEventListener('click',()=> setExp(todayAt(21,0))); }
+  if(bClose&& !bClose._bound){ bClose._bound=true; bClose.addEventListener('click',()=> { const iso=applyCloseTime(); if(iso) setExp(iso); }); }
+}
+document.addEventListener('DOMContentLoaded', initQuickTimeButtons);
